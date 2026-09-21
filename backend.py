@@ -3,17 +3,27 @@
 ## implemented in Python using libraries such as scikit-learn. The backend functions are designed to be called from the Gradio interface 
 ## to perform the necessary data processing and modeling tasks based on user input.
 import pandas as pd
+import gradio as gr
 import numpy as np
 from pybaselines import Baseline
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
+from svm_model import run_svm
 
 #### loading file and returning the dataframe, preview, and list of metadata columns and target columns
 def load_file(file, max_metadata_cols=10):
 
     if file is None:
-        return None, None, []
+        return (
+            None,
+            None,
+            gr.CheckboxGroup(choices=[], value=[]),
+            gr.Dropdown(choices=[], value=None)
+        )
 
-    df = pd.read_csv(file)
+    filepath = file.name if hasattr(file, "name") else file
+
+    df = pd.read_csv(filepath)
 
     preview = df.head()
 
@@ -21,7 +31,18 @@ def load_file(file, max_metadata_cols=10):
 
     target_cols = displayed_cols.copy()
 
-    return df, preview, displayed_cols, target_cols
+    return (
+        df,
+        preview,
+        gr.CheckboxGroup(
+            choices=displayed_cols,
+            value=[]
+        ),
+        gr.Dropdown(
+            choices=target_cols,
+            value=None
+        )
+    )
 
 
 # ---------------------------------------------------
@@ -48,7 +69,7 @@ def split_metadata(df, metadata_cols, target_col):
 
     spectra_df = df.drop(columns=reserved_cols)
 
-    X = spectra_df.values
+    X = spectra_df.copy()
 
     fig, ax = plt.subplots(figsize=(7, 4))
 
@@ -84,17 +105,110 @@ def baseline_correction(X, bl_method):
 
     corrected = []
 
-    for spectrum in X:
+    for _, spectrum in X.iterrows():
+
+        spectrum = spectrum.values.astype(float)
+
         baseline, _ = baseline_function(spectrum)
+
         corrected.append(spectrum - baseline)
 
-    X_corr = np.asarray(corrected)
+    X_corr = pd.DataFrame(
+        corrected,
+        columns=X.columns
+    )
 
     fig, ax = plt.subplots(figsize=(7,4))
-    ax.plot(X_corr.T, linewidth=0.8)
+
+    ax.plot(X_corr.T)
+
     ax.set_title("Baseline Corrected Spectra")
     ax.set_xlabel("Variable")
     ax.set_ylabel("Intensity")
+
     plt.close(fig)
 
     return fig, X_corr
+
+def preprocess_data(X_corr,method,order,p,w,m):
+
+    if X_corr is None:
+        return None
+
+    if method == "None":
+        return X_corr
+
+    if method == "Derivatives":
+        return np.diff(
+            X_corr,
+            n=int(order),
+            axis=1
+        )
+
+    if method == "Savitzky-Golay":
+
+        w = int(w)
+        p = int(p)
+
+        if w % 2 == 0:
+            w += 1
+
+        if w <= p:
+            w = p + 3
+
+        return savgol_filter(
+            X_corr,
+            w,
+            p,
+            deriv=int(m),
+            axis=1
+        )
+
+    return X_corr
+
+def two_step(X_corr,m1,m2,order,p,w,m):
+
+    if X_corr is None:
+        return None, None
+
+    X1 = preprocess_data(X_corr,m1,order,p,w,m)
+
+    X2 = preprocess_data(X1,m2,order,p,w,m)
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(X2.T, linewidth=0.8)
+
+    ax.set_title("Processed Spectra")
+    ax.set_xlabel("Variable")
+    ax.set_ylabel("Intensity")
+
+    plt.close(fig)
+
+    return fig, X2
+
+MODEL_MAP = {
+    "SVM": run_svm,
+}
+
+def run_pymodel(X, y, model_type, train_percent, preprocess, cv_method, resampling, svm_method=None):
+
+    model = MODEL_MAP[model_type]
+
+    result = model(
+        X=X,
+        y=y,
+        train_percent=train_percent,
+        preprocess=preprocess,
+        cv_method=cv_method,
+        resampling=resampling,
+        svm_method=svm_method
+    )
+
+    return (
+        result["accuracy"],
+        result["kappa"],
+        result["best_parameters"],
+        result["confusion_matrix"],
+        result["accuracy_plot"],
+        result["importance_plot"],
+    )

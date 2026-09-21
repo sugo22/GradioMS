@@ -5,57 +5,37 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import (
-    train_test_split,
-    GridSearchCV,
-    StratifiedKFold
-)
-
-from sklearn.preprocessing import (
-    StandardScaler,
-    LabelEncoder
-)
-
+from sklearn.model_selection import (train_test_split,GridSearchCV,StratifiedKFold)
+from sklearn.preprocessing import (StandardScaler,LabelEncoder)
 from sklearn.pipeline import Pipeline
-
 from sklearn.feature_selection import VarianceThreshold
-
 from sklearn.svm import SVC
-
-from sklearn.metrics import (
-    confusion_matrix,
-    accuracy_score,
-    cohen_kappa_score,
-    ConfusionMatrixDisplay
-)
-
+from sklearn.metrics import (confusion_matrix,accuracy_score,cohen_kappa_score,ConfusionMatrixDisplay)
 from sklearn.inspection import permutation_importance
 
-
 def run_svm(
-        file,
-        train_percent,
-        target_variable,
-        svm_method,
-        preprocess="none",
-        cv_method="StratifiedKFold",
-        resampling=5,
-        cost=1,
-        gamma=None
+    X,
+    y,
+    train_percent,
+    svm_method,
+    preprocess="none",
+    cv_method="StratifiedKFold",
+    resampling=5,
+    cost=1,
+    gamma=None
 ):
 
     ####################################################
     # Load data
     ####################################################
+    X = X.copy()
+    y = y.copy()
 
-    df = pd.read_csv(file)
+    if X is None or y is None:
+        raise ValueError("Missing X or y")
 
-    if target_variable not in df.columns:
-        raise ValueError(f"{target_variable} not found")
-
-    y = df[target_variable]
-    X = df.drop(columns=[target_variable])
-
+    X = pd.DataFrame(X)
+    y = pd.Series(y)
     ####################################################
     # Convert categorical predictors
     ####################################################
@@ -63,17 +43,6 @@ def run_svm(
     for col in X.columns:
         if X[col].dtype == object:
             X[col] = LabelEncoder().fit_transform(X[col].astype(str))
-
-    ####################################################
-    # Remove near-zero variance
-    ####################################################
-
-    selector = VarianceThreshold(threshold=1e-5)
-
-    X = pd.DataFrame(
-        selector.fit_transform(X),
-        columns=X.columns[selector.get_support()]
-    )
 
     ####################################################
     # Remove missing values
@@ -204,6 +173,14 @@ def run_svm(
     plt.ylabel("Mean CV Accuracy")
     plt.tight_layout()
     plt.savefig("model_accuracy.png")
+    fig_acc, ax = plt.subplots(figsize=(8, 6))
+
+    ax.plot(scores, marker="o")
+    ax.set_title("SVM Grid Search Accuracy")
+    ax.set_xlabel("Parameter Combination")
+    ax.set_ylabel("Mean CV Accuracy")
+
+    plt.tight_layout()
     plt.close()
 
     ####################################################
@@ -242,6 +219,13 @@ def run_svm(
 
     plt.tight_layout()
     plt.savefig("variable_importance.png")
+    fig_imp, ax = plt.subplots(figsize=(10, 6))
+
+    importance.nlargest(20).plot.bar(ax=ax)
+
+    ax.set_title("Permutation Importance")
+
+    plt.tight_layout()
     plt.close()
 
     ####################################################
@@ -249,14 +233,13 @@ def run_svm(
     ####################################################
 
     result = {
-        "status": "success",
-        "accuracy": float(accuracy),
-        "kappa": float(kappa),
-        "best_parameters": grid.best_params_,
-        "confusion_matrix": cm_df.to_dict()
+    "status": "success",
+    "accuracy": float(accuracy),
+    "kappa": float(kappa),
+    "best_parameters": grid.best_params_,
+    "confusion_matrix": cm_df,
+    "accuracy_plot": fig_acc,
+    "importance_plot": fig_imp,
     }
-
-    with open("result.json", "w") as f:
-        json.dump(result, f, indent=4)
 
     return result
