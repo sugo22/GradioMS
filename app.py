@@ -175,6 +175,7 @@ with gr.Blocks() as demo:
         model_type = gr.Dropdown(
             choices=[
                 "SVM",
+                "Random Forest",
                 "PLS"
             ],
             value="SVM",
@@ -257,6 +258,10 @@ with gr.Blocks() as demo:
             label="Variable Importance"
         )
 
+        scores_plot = gr.Plot(
+            label="PLS Scores"
+        )
+
         run_btn.click(
             run_pymodel,
             inputs=[
@@ -275,7 +280,8 @@ with gr.Blocks() as demo:
                 parameter_output,
                 confusion_output,
                 accuracy_plot,
-                importance_plot
+                importance_plot,
+                scores_plot
             ]
         )
 

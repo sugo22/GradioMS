@@ -8,7 +8,9 @@ import numpy as np
 from pybaselines import Baseline
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
+from randomforest import run_rf
 from svm_model import run_svm
+from regression import run_pls
 
 #### loading file and returning the dataframe, preview, and list of metadata columns and target columns
 def load_file(file, max_metadata_cols=10):
@@ -190,19 +192,56 @@ MODEL_MAP = {
     "SVM": run_svm,
 }
 
-def run_pymodel(X, y, model_type, train_percent, preprocess, cv_method, resampling, svm_method=None):
+def run_pymodel(
+    X,
+    y,
+    model_type,
+    train_percent,
+    preprocess,
+    cv_method,
+    resampling,
+    svm_method=None,
+    max_comp=10
+):
 
-    model = MODEL_MAP[model_type]
+    if model_type == "SVM":
 
-    result = model(
-        X=X,
-        y=y,
-        train_percent=train_percent,
-        preprocess=preprocess,
-        cv_method=cv_method,
-        resampling=resampling,
-        svm_method=svm_method
-    )
+        result = run_svm(
+            X,
+            y,
+            train_percent,
+            svm_method,
+            preprocess,
+            cv_method,
+            resampling
+        )
+
+
+    elif model_type == "Random Forest":
+
+        result = run_rf(
+            X,
+            y,
+            train_percent,
+            preprocess,
+            cv_method,
+            resampling
+        )
+    elif model_type == "PLS":
+
+        result = run_pls(
+            X,
+            y,
+            train_percent,
+            preprocess,
+            cv_method,
+            resampling,
+            max_comp
+        )
+    else:
+        raise ValueError(
+            f"Unknown model type: {model_type}"
+        )
 
     return (
         result["accuracy"],
@@ -211,4 +250,5 @@ def run_pymodel(X, y, model_type, train_percent, preprocess, cv_method, resampli
         result["confusion_matrix"],
         result["accuracy_plot"],
         result["importance_plot"],
+        result.get("scores_plot", None)
     )
